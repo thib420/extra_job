@@ -6,7 +6,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet } from 'react-native';
 import { Colors } from '../lib/constants';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseEnabled } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 
 SplashScreen.preventAutoHideAsync();
@@ -29,6 +29,13 @@ export default function RootLayout() {
 
   useEffect(() => {
     let mounted = true;
+
+    if (!supabaseEnabled) {
+      setSession(null);
+      return () => {
+        mounted = false;
+      };
+    }
 
     const bootstrap = async () => {
       const { data } = await supabase.auth.getSession();

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { Session, User } from '@supabase/supabase-js';
-import { supabase } from './supabase';
+import { supabase, supabaseEnabled } from './supabase';
 import { UserProfile } from '../types/database';
 
 interface AuthState {
@@ -29,6 +29,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   fetchProfile: async () => {
+    if (!supabaseEnabled) return;
     const { user } = get();
     if (!user) return;
 
@@ -44,6 +45,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signOut: async () => {
+    if (!supabaseEnabled) {
+      set({ session: null, user: null, profile: null });
+      return;
+    }
     await supabase.auth.signOut();
     set({ session: null, user: null, profile: null });
   },
