@@ -1,14 +1,16 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, Dimensions,
+  View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, Dimensions, ActivityIndicator,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { MOCK_LISTINGS } from '../../lib/mock-data';
-import { Category } from '../../types/database';
+import { Listing, Category } from '../../types/database';
 import { Colors, Spacing, BorderRadius, FontSize, CATEGORIES } from '../../lib/constants';
 import { useAuthStore } from '../../lib/store';
+import { supabaseEnabled } from '../../lib/supabase';
+import { applyToListing, deleteListing, getApplicationsForListing, getListing } from '../../lib/api';
 import Button from '../../components/Button';
 
 const { width } = Dimensions.get('window');
@@ -22,10 +24,82 @@ export default function ListingDetailScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const [hasApplied, setHasApplied] = useState(false);
+  const [applying, setApplying] = useState(false);
 
-  const listing = MOCK_LISTINGS.find((l) => l.id === id);
+  const [listing, setListing] = useState<Listing | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
-  if (!listing) {
+  useEffect(() => {
+    let isActive = true;
+
+    const loadListing = async () => {
+      if (!id) {
+        if (isActive) {
+          setLoading(false);
+        }
+        return;
+      }
+
+      if (isActive) {
+        setLoading(true);
+        setError(false);
+      }
+
+      if (!supabaseEnabled) {
+        const found = MOCK_LISTINGS.find((l) => l.id === id) ?? null;
+        if (isActive) {
+          setListing(found);
+          setHasApplied(false);
+          setLoading(false);
+        }
+        return;
+      }
+
+      try {
+        const data = await getListing(id);
+        if (!isActive) return;
+
+        setListing(data);
+
+        if (user?.id) {
+          try {
+            const applications = await getApplicationsForListing(data.id);
+            if (!isActive) return;
+            setHasApplied(applications.some((application) => application.user_id === user.id));
+          } catch {
+            if (!isActive) return;
+            setHasApplied(false);
+          }
+        } else {
+          setHasApplied(false);
+        }
+      } catch {
+        if (!isActive) return;
+        setError(true);
+      } finally {
+        if (isActive) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadListing();
+
+    return () => {
+      isActive = false;
+    };
+  }, [id, user?.id]);
+
+  if (loading) {
+    return (
+      <View style={styles.loader}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
+
+  if (error || !listing) {
     return (
       <View style={styles.loader}>
         <Text style={styles.errorText}>Annonce introuvable</Text>
@@ -37,7 +111,7 @@ export default function ListingDetailScreen() {
   const spotsLeft = listing.spots_total - listing.spots_filled;
   const isMyListing = !!user && user.id === listing.user_id;
 
-  const handleApply = () => {
+  const handleApply = async () => {
     if (!user) {
       Alert.alert('Connexion requise', 'Connectez-vous pour candidater.', [
         { text: 'Annuler', style: 'cancel' },
@@ -46,8 +120,50 @@ export default function ListingDetailScreen() {
       return;
     }
 
-    setHasApplied(true);
-    Alert.alert('Candidature envoyée !', 'L\'annonceur a été notifié (démo).');
+    if (applying) return;
+
+    if (!supabaseEnabled) {
+      setHasApplied(true);
+      Alert.alert('Candidature envoyée !', 'L\'annonceur a été notifié (démo).');
+      return;
+    }
+
+    setApplying(true);
+
+    try {
+      await applyToListing(listing.id, user.id);
+      setHasApplied(true);
+      Alert.alert('Candidature envoyée !', 'L\'annonceur a été notifié.');
+    } catch (err: any) {
+      if (String(err?.code) === '23505') {
+        setHasApplied(true);
+        Alert.alert('Information', 'Vous avez déjà candidaté.');
+      } else {
+        Alert.alert('Erreur', 'Une erreur est survenue.');
+      }
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  const handleDelete = () => {
+    Alert.alert('Supprimer cette annonce ?', '', [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: 'Supprimer',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            if (supabaseEnabled) {
+              await deleteListing(listing.id);
+            }
+            router.back();
+          } catch {
+            Alert.alert('Erreur', 'Impossible de supprimer l\'annonce.');
+          }
+        },
+      },
+    ]);
   };
 
   const handleContact = () => {
@@ -151,7 +267,7 @@ export default function ListingDetailScreen() {
         {/* Actions */}
         <View style={styles.actions}>
           {!isMyListing && spotsLeft > 0 && !hasApplied && (
-            <Button title="Je suis dispo !" onPress={handleApply} />
+            <Button title="Je suis dispo !" onPress={handleApply} disabled={applying} loading={applying} />
           )}
           {!isMyListing && hasApplied && (
             <View style={styles.appliedBadge}>
@@ -163,7 +279,7 @@ export default function ListingDetailScreen() {
             <>
               <Button title="Voir les candidatures" onPress={() => Alert.alert('Bientôt', 'Écran candidat à connecter (MVP).')} />
               <Button title="Modifier l'annonce" onPress={() => Alert.alert('Bientôt', 'Édition à connecter (MVP).')} variant="outline" />
-              <Button title="Supprimer" onPress={() => Alert.alert('Bientôt', 'Suppression à connecter (MVP).')} variant="ghost" />
+              <Button title="Supprimer" onPress={handleDelete} variant="ghost" />
             </>
           )}
           <Button

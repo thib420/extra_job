@@ -1,14 +1,16 @@
-import { useState, useMemo } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput,
+  View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Category } from '../../types/database';
+import { Category, Listing } from '../../types/database';
 import { Colors, Spacing, BorderRadius, FontSize, CATEGORIES, RADIUS_OPTIONS } from '../../lib/constants';
 import { MOCK_LISTINGS } from '../../lib/mock-data';
+import { supabaseEnabled } from '../../lib/supabase';
+import { searchListings } from '../../lib/api';
 import ListingCard from '../../components/ListingCard';
 
 type SortBy = 'recent' | 'closest' | 'date';
@@ -23,30 +25,54 @@ export default function SearchScreen() {
   const [showFilters, setShowFilters] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
 
-  const filteredListings = useMemo(() => {
-    let results = [...MOCK_LISTINGS];
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-    if (query) {
-      const q = query.toLowerCase();
-      results = results.filter(
-        (l) => l.title.toLowerCase().includes(q) || l.description.toLowerCase().includes(q)
-      );
+  const fetchListings = useCallback(async () => {
+    setError(null);
+    try {
+      if (!supabaseEnabled) {
+        let results = [...MOCK_LISTINGS];
+        if (query) {
+          const q = query.toLowerCase();
+          results = results.filter(
+            (l) => l.title.toLowerCase().includes(q) || l.description.toLowerCase().includes(q)
+          );
+        }
+        if (category) {
+          results = results.filter((l) => l.category === category);
+        }
+        if (sortBy === 'date') {
+          results.sort((a, b) => {
+            if (!a.preferred_date) return 1;
+            if (!b.preferred_date) return -1;
+            return new Date(a.preferred_date).getTime() - new Date(b.preferred_date).getTime();
+          });
+        }
+        setListings(results);
+      } else {
+        const results = await searchListings({ query, category, sortBy });
+        setListings(results);
+      }
+    } catch {
+      setError('Impossible de charger les annonces. Vérifiez votre connexion.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-
-    if (category) {
-      results = results.filter((l) => l.category === category);
-    }
-
-    if (sortBy === 'date') {
-      results.sort((a, b) => {
-        if (!a.preferred_date) return 1;
-        if (!b.preferred_date) return -1;
-        return new Date(a.preferred_date).getTime() - new Date(b.preferred_date).getTime();
-      });
-    }
-
-    return results;
   }, [query, category, sortBy]);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchListings();
+  }, [fetchListings]);
+
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchListings();
+  }, [fetchListings]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -164,21 +190,36 @@ export default function SearchScreen() {
         </View>
       )}
 
+      {/* Error banner */}
+      {error && (
+        <View style={styles.errorBanner}>
+          <Ionicons name="wifi-outline" size={14} color={Colors.error} />
+          <Text style={styles.errorBannerText}>{error}</Text>
+        </View>
+      )}
+
       {/* Results */}
       {viewMode === 'list' ? (
-        <FlatList
-          data={filteredListings}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <ListingCard listing={item} />}
-          contentContainerStyle={styles.list}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Ionicons name="search-outline" size={48} color={Colors.textTertiary} />
-              <Text style={styles.emptyText}>Aucune annonce trouvée</Text>
-              <Text style={styles.emptySubtext}>Modifiez vos filtres ou élargissez le rayon</Text>
-            </View>
-          }
-        />
+        loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+          </View>
+        ) : (
+          <FlatList
+            data={listings}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => <ListingCard listing={item} />}
+            contentContainerStyle={styles.list}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
+            ListEmptyComponent={
+              <View style={styles.empty}>
+                <Ionicons name="search-outline" size={48} color={Colors.textTertiary} />
+                <Text style={styles.emptyText}>Aucune annonce trouvée</Text>
+                <Text style={styles.emptySubtext}>Modifiez vos filtres ou élargissez le rayon</Text>
+              </View>
+            }
+          />
+        )
       ) : (
         <View style={styles.mapContainer}>
           <MapView
@@ -190,7 +231,7 @@ export default function SearchScreen() {
               longitudeDelta: 9,
             }}
           >
-            {filteredListings.map((listing) => (
+            {listings.map((listing) => (
               <Marker
                 key={listing.id}
                 coordinate={{ latitude: listing.latitude, longitude: listing.longitude }}
@@ -350,6 +391,28 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
   radiusTextActive: { color: Colors.primaryDark },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.sm,
+    backgroundColor: Colors.urgentLight,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.error,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   list: { paddingTop: Spacing.sm, paddingBottom: Spacing.xxxl },
   mapContainer: {
     flex: 1,

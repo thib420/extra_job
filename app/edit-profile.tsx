@@ -1,27 +1,67 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { MOCK_USERS } from '../lib/mock-data';
-import { Colors, Spacing, BorderRadius, FontSize } from '../lib/constants';
+import { Colors, Spacing, FontSize } from '../lib/constants';
+import { useAuthStore } from '../lib/store';
+import { updateUserProfile } from '../lib/api';
+import { supabaseEnabled } from '../lib/supabase';
 import Input from '../components/Input';
 import Button from '../components/Button';
 
-const CURRENT_USER = MOCK_USERS[0];
-
 export default function EditProfileScreen() {
   const router = useRouter();
-  const [displayName, setDisplayName] = useState(CURRENT_USER.display_name);
-  const [bio, setBio] = useState(CURRENT_USER.bio || '');
-  const [skills, setSkills] = useState(CURRENT_USER.skills.join(', '));
+  const profile = useAuthStore((s) => s.profile);
+  const user = useAuthStore((s) => s.user);
+  const fetchProfile = useAuthStore((s) => s.fetchProfile);
 
-  const handleSave = () => {
+  const [displayName, setDisplayName] = useState(profile?.display_name || '');
+  const [bio, setBio] = useState(profile?.bio || '');
+  const [skills, setSkills] = useState((profile?.skills || []).join(', '));
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setDisplayName(profile?.display_name || '');
+    setBio(profile?.bio || '');
+    setSkills((profile?.skills || []).join(', '));
+  }, [profile]);
+
+  const handleSave = async () => {
+    if (!user) {
+      Alert.alert('Erreur', 'Connexion requise.');
+      return;
+    }
+
     if (!displayName.trim()) {
       Alert.alert('Erreur', 'Le nom est requis.');
       return;
     }
-    Alert.alert('Profil mis à jour !', '(démo)');
-    router.back();
+
+    if (!supabaseEnabled) {
+      Alert.alert('Profil mis à jour !', '(démo)');
+      router.back();
+      return;
+    }
+
+    if (saving) return;
+
+    const skillsArray = skills.split(',').map((s) => s.trim()).filter(Boolean);
+
+    setSaving(true);
+
+    try {
+      await updateUserProfile(user.id, {
+        display_name: displayName.trim(),
+        bio: bio.trim(),
+        skills: skillsArray,
+      });
+      await fetchProfile();
+      router.back();
+    } catch {
+      Alert.alert('Erreur', 'Impossible de mettre à jour le profil.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -50,7 +90,7 @@ export default function EditProfileScreen() {
         onChangeText={setSkills}
       />
 
-      <Button title="Enregistrer" onPress={handleSave} />
+      <Button title="Enregistrer" onPress={handleSave} disabled={saving} loading={saving} />
     </ScrollView>
   );
 }

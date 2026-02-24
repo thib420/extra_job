@@ -1,8 +1,11 @@
+import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, BorderRadius, FontSize } from '../../lib/constants';
 import { useAuthStore } from '../../lib/store';
+import { getUserListings, getUserApplications, getUserAverageRating, getReviewsForUser } from '../../lib/api';
+import { supabaseEnabled } from '../../lib/supabase';
 import Button from '../../components/Button';
 
 export default function ProfileScreen() {
@@ -10,6 +13,63 @@ export default function ProfileScreen() {
   const user = useAuthStore((s) => s.user);
   const profile = useAuthStore((s) => s.profile);
   const signOut = useAuthStore((s) => s.signOut);
+
+  const [listingCount, setListingCount] = useState<number>(5);
+  const [missionsCount, setMissionsCount] = useState<number>(8);
+  const [averageRating, setAverageRating] = useState<number | null>(null);
+  const [reviewCount, setReviewCount] = useState<number>(12);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadStats = async () => {
+      if (!user?.id) {
+        if (!isActive) return;
+        setListingCount(0);
+        setMissionsCount(0);
+        setAverageRating(null);
+        setReviewCount(0);
+        return;
+      }
+
+      if (!supabaseEnabled) {
+        if (!isActive) return;
+        setListingCount(5);
+        setMissionsCount(8);
+        setAverageRating(null);
+        setReviewCount(12);
+        return;
+      }
+
+      try {
+        const [listings, applications, rating, reviews] = await Promise.all([
+          getUserListings(user.id),
+          getUserApplications(user.id),
+          getUserAverageRating(user.id),
+          getReviewsForUser(user.id),
+        ]);
+
+        if (!isActive) return;
+
+        setListingCount(listings.length);
+        setMissionsCount(applications.filter((application) => application.status === 'accepted').length);
+        setAverageRating(rating);
+        setReviewCount(reviews.length);
+      } catch {
+        if (!isActive) return;
+        setListingCount(0);
+        setMissionsCount(0);
+        setAverageRating(null);
+        setReviewCount(0);
+      }
+    };
+
+    loadStats();
+
+    return () => {
+      isActive = false;
+    };
+  }, [user?.id]);
 
   if (!user) {
     return (
@@ -32,6 +92,8 @@ export default function ProfileScreen() {
     { icon: 'create-outline' as const, label: 'Modifier mon profil', route: '/edit-profile' },
   ];
 
+  const ratingLabel = averageRating === null ? '–' : `${averageRating.toFixed(1)}/5`;
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Profile card */}
@@ -43,8 +105,8 @@ export default function ProfileScreen() {
         <Text style={styles.bio}>{bio}</Text>
         <View style={styles.ratingRow}>
           <Ionicons name="star" size={16} color={Colors.urgent} />
-          <Text style={styles.ratingText}>MVP</Text>
-          <Text style={styles.ratingCount}>(avis à connecter)</Text>
+          <Text style={styles.ratingText}>{ratingLabel}</Text>
+          <Text style={styles.ratingCount}>({reviewCount} avis)</Text>
         </View>
         {skills.length > 0 && (
           <View style={styles.skillsRow}>
@@ -60,17 +122,17 @@ export default function ProfileScreen() {
       {/* Stats */}
       <View style={styles.statsRow}>
         <View style={styles.statItem}>
-          <Text style={styles.statNumber}>5</Text>
+          <Text style={styles.statNumber}>{listingCount}</Text>
           <Text style={styles.statLabel}>Annonces</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
-          <Text style={styles.statNumber}>8</Text>
+          <Text style={styles.statNumber}>{missionsCount}</Text>
           <Text style={styles.statLabel}>Missions</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
-          <Text style={styles.statNumber}>12</Text>
+          <Text style={styles.statNumber}>{reviewCount}</Text>
           <Text style={styles.statLabel}>Avis</Text>
         </View>
       </View>

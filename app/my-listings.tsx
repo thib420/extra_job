@@ -1,20 +1,86 @@
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
-import { useMemo } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { MOCK_LISTINGS } from '../lib/mock-data';
-import { Colors, Spacing, BorderRadius, FontSize } from '../lib/constants';
+import { Colors, Spacing, FontSize } from '../lib/constants';
 import { useAuthStore } from '../lib/store';
+import { getUserListings, deleteListing } from '../lib/api';
+import { supabaseEnabled } from '../lib/supabase';
+import { Listing } from '../types/database';
 import Button from '../components/Button';
 import ListingCard from '../components/ListingCard';
+
+const STATUS_LABELS: Record<Listing['status'], { label: string; color: string }> = {
+  active: { label: 'Active', color: Colors.success },
+  complete: { label: 'Terminée', color: Colors.textSecondary },
+  expired: { label: 'Expirée', color: Colors.textSecondary },
+  cancelled: { label: 'Annulée', color: Colors.textSecondary },
+};
 
 export default function MyListingsScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
-  const listings = useMemo(
-    () => MOCK_LISTINGS.filter((l) => l.user_id === (user?.id || '')),
-    [user?.id]
-  );
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadListings = useCallback(async (isRefreshing = false) => {
+    if (!user) {
+      setListings([]);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
+    if (isRefreshing) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+
+    try {
+      if (!supabaseEnabled) {
+        setListings(MOCK_LISTINGS.filter((l) => l.user_id === user.id));
+        return;
+      }
+
+      const data = await getUserListings(user.id);
+      setListings(data);
+    } catch {
+      Alert.alert('Erreur', 'Impossible de charger vos annonces.');
+    } finally {
+      if (isRefreshing) {
+        setRefreshing(false);
+      } else {
+        setLoading(false);
+      }
+    }
+  }, [user]);
+
+  useEffect(() => {
+    loadListings();
+  }, [loadListings]);
+
+  const handleDelete = (listingId: string) => {
+    Alert.alert('Supprimer cette annonce ?', '', [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: 'Supprimer',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            if (supabaseEnabled) {
+              await deleteListing(listingId);
+            }
+            setListings((prev) => prev.filter((listing) => listing.id !== listingId));
+          } catch {
+            Alert.alert('Erreur', 'Impossible de supprimer.');
+          }
+        },
+      },
+    ]);
+  };
 
   if (!user) {
     return (
@@ -27,23 +93,37 @@ export default function MyListingsScreen() {
     );
   }
 
+  if (loading) {
+    return (
+      <View style={styles.loader}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <FlatList
         data={listings}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View>
-            <ListingCard listing={item} />
-            <View style={styles.actionRow}>
-              <Text style={[styles.statusBadge, styles.statusActive]}>Active</Text>
-              <TouchableOpacity onPress={() => Alert.alert('Supprimer ?', 'Confirmation requise (démo)')}>
-                <Ionicons name="trash-outline" size={18} color={Colors.error} />
-              </TouchableOpacity>
+        renderItem={({ item }) => {
+          const status = STATUS_LABELS[item.status] ?? STATUS_LABELS.active;
+
+          return (
+            <View>
+              <ListingCard listing={item} />
+              <View style={styles.actionRow}>
+                <Text style={[styles.statusBadge, { color: status.color }]}>{status.label}</Text>
+                <TouchableOpacity onPress={() => handleDelete(item.id)}>
+                  <Ionicons name="trash-outline" size={18} color={Colors.error} />
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        )}
+          );
+        }}
         contentContainerStyle={styles.list}
+        refreshing={refreshing}
+        onRefresh={() => loadListings(true)}
         ListEmptyComponent={
           <View style={styles.empty}>
             <Ionicons name="document-outline" size={48} color={Colors.textTertiary} />
@@ -57,14 +137,14 @@ export default function MyListingsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.backgroundSecondary },
+  loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   list: { paddingTop: Spacing.md, paddingBottom: 40 },
   actionRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     marginHorizontal: Spacing.lg, marginTop: -Spacing.sm, marginBottom: Spacing.md,
     paddingHorizontal: Spacing.md,
   },
-  statusBadge: { fontSize: FontSize.xs, fontFamily: 'Inter_500Medium', color: Colors.textSecondary },
-  statusActive: { color: Colors.primary },
+  statusBadge: { fontSize: FontSize.xs, fontFamily: 'Inter_500Medium' },
   empty: { alignItems: 'center', justifyContent: 'center', paddingTop: 100, gap: Spacing.sm },
   emptyText: { fontSize: FontSize.lg, fontFamily: 'Inter_600SemiBold', color: Colors.text },
   locked: {

@@ -1,15 +1,26 @@
 import { useEffect } from 'react';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Pressable } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../lib/constants';
 import { supabase, supabaseEnabled } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 
 SplashScreen.preventAutoHideAsync();
+
+function AuthCloseButton() {
+  const router = useRouter();
+
+  return (
+    <Pressable onPress={() => router.replace('/(tabs)')} hitSlop={10} style={styles.closeButton}>
+      <Ionicons name="close" size={22} color={Colors.secondary} />
+    </Pressable>
+  );
+}
 
 export default function RootLayout() {
   const setSession = useAuthStore((s) => s.setSession);
@@ -78,8 +89,22 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="listing/[id]" options={{ title: 'Annonce' }} />
         <Stack.Screen name="conversation/[id]" options={{ title: 'Conversation' }} />
-        <Stack.Screen name="auth/login" options={{ title: 'Connexion', presentation: 'modal' }} />
-        <Stack.Screen name="auth/register" options={{ title: 'Inscription', presentation: 'modal' }} />
+        <Stack.Screen
+          name="auth/login"
+          options={{
+            title: 'Connexion',
+            presentation: 'modal',
+            headerRight: () => <AuthCloseButton />,
+          }}
+        />
+        <Stack.Screen
+          name="auth/register"
+          options={{
+            title: 'Inscription',
+            presentation: 'modal',
+            headerRight: () => <AuthCloseButton />,
+          }}
+        />
         <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
         <Stack.Screen name="edit-profile" options={{ title: 'Modifier mon profil' }} />
         <Stack.Screen name="my-listings" options={{ title: 'Mes annonces' }} />
@@ -91,4 +116,7 @@ export default function RootLayout() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  closeButton: {
+    padding: 4,
+  },
 });

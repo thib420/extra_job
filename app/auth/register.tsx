@@ -22,12 +22,20 @@ export default function RegisterScreen() {
       Alert.alert('Erreur', 'Le mot de passe doit contenir au moins 6 caractères.');
       return;
     }
+
     setLoading(true);
+
+    const emailRedirectTo = 'extra-job://auth/callback';
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { display_name: displayName } },
+      options: {
+        data: { display_name: displayName },
+        emailRedirectTo,
+      },
     });
+
     if (error) {
       setLoading(false);
       Alert.alert('Erreur', error.message);

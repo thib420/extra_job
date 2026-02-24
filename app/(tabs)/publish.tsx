@@ -8,6 +8,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { Category } from '../../types/database';
 import { Colors, Spacing, BorderRadius, FontSize, CATEGORIES, DURATIONS } from '../../lib/constants';
 import { useAuthStore } from '../../lib/store';
+import { supabaseEnabled } from '../../lib/supabase';
+import { createListing } from '../../lib/api';
 import Input from '../../components/Input';
 import Button from '../../components/Button';
 
@@ -15,6 +17,8 @@ interface AddressSuggestion {
   label: string;
   city: string;
   postcode: string;
+  latitude: number;
+  longitude: number;
 }
 
 export default function PublishScreen() {
@@ -25,16 +29,24 @@ export default function PublishScreen() {
   const [category, setCategory] = useState<Category | ''>('');
   const [addressQuery, setAddressQuery] = useState('');
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
+  const [selectedAddress, setSelectedAddress] = useState('');
+  const [selectedCity, setSelectedCity] = useState('');
+  const [selectedPostcode, setSelectedPostcode] = useState('');
+  const [selectedLat, setSelectedLat] = useState<number | null>(null);
+  const [selectedLng, setSelectedLng] = useState<number | null>(null);
   const [preferredDate, setPreferredDate] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [duration, setDuration] = useState(2);
   const [spotsTotal, setSpotsTotal] = useState(1);
   const [photos, setPhotos] = useState<string[]>([]);
   const [isUrgent, setIsUrgent] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const searchAddress = (text: string) => {
     setAddressQuery(text);
+    setSelectedLat(null);
+    setSelectedLng(null);
     if (searchTimeout.current) {
       clearTimeout(searchTimeout.current);
     }
@@ -52,6 +64,8 @@ export default function PublishScreen() {
           label: f.properties.label,
           city: f.properties.city,
           postcode: f.properties.postcode,
+          latitude: f.geometry.coordinates[1],
+          longitude: f.geometry.coordinates[0],
         }));
         setSuggestions(results);
       } catch {
@@ -62,6 +76,11 @@ export default function PublishScreen() {
 
   const selectAddress = (s: AddressSuggestion) => {
     setAddressQuery(s.label);
+    setSelectedAddress(s.label);
+    setSelectedCity(s.city);
+    setSelectedPostcode(s.postcode);
+    setSelectedLat(s.latitude);
+    setSelectedLng(s.longitude);
     setSuggestions([]);
   };
 
@@ -82,7 +101,14 @@ export default function PublishScreen() {
     }
   };
 
-  const handlePublish = () => {
+  const resetForm = () => {
+    setTitle(''); setDescription(''); setCategory(''); setAddressQuery('');
+    setSelectedAddress(''); setSelectedCity(''); setSelectedPostcode('');
+    setSelectedLat(null); setSelectedLng(null);
+    setPreferredDate(null); setDuration(2); setSpotsTotal(1); setPhotos([]); setIsUrgent(false);
+  };
+
+  const handlePublish = async () => {
     if (!user) {
       Alert.alert('Connexion requise', 'Connectez-vous pour publier une annonce.', [
         { text: 'Annuler', style: 'cancel' },
@@ -95,9 +121,46 @@ export default function PublishScreen() {
       Alert.alert('Champs requis', 'Veuillez remplir le titre, la catégorie, la description et l\'adresse.');
       return;
     }
-    Alert.alert('Annonce publiée !', 'Votre annonce est maintenant visible (démo).');
-    setTitle(''); setDescription(''); setCategory(''); setAddressQuery('');
-    setPreferredDate(null); setDuration(2); setSpotsTotal(1); setPhotos([]); setIsUrgent(false);
+
+    if (supabaseEnabled && (selectedLat === null || selectedLng === null)) {
+      Alert.alert('Adresse invalide', 'Veuillez sélectionner une adresse depuis la liste de suggestions.');
+      return;
+    }
+
+    if (!supabaseEnabled) {
+      Alert.alert('Annonce publiée !', 'Votre annonce est maintenant visible (démo).');
+      resetForm();
+      return;
+    }
+
+    setPublishing(true);
+    try {
+      await createListing({
+        user_id: user.id,
+        title,
+        description,
+        category: category as Category,
+        address: selectedAddress,
+        city: selectedCity,
+        postal_code: selectedPostcode,
+        latitude: selectedLat!,
+        longitude: selectedLng!,
+        preferred_date: preferredDate?.toISOString() ?? null,
+        estimated_duration: duration,
+        spots_total: spotsTotal,
+        spots_filled: 0,
+        photos: [],
+        is_urgent: isUrgent,
+        status: 'active',
+        expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
+      });
+      resetForm();
+      router.replace('/');
+    } catch {
+      Alert.alert('Erreur', 'Impossible de publier l\'annonce. Veuillez réessayer.');
+    } finally {
+      setPublishing(false);
+    }
   };
 
   return (
@@ -243,7 +306,7 @@ export default function PublishScreen() {
         />
       </View>
 
-      <Button title="Publier l'annonce" onPress={handlePublish} style={styles.publishBtn} />
+      <Button title="Publier l'annonce" onPress={handlePublish} loading={publishing} style={styles.publishBtn} />
     </ScrollView>
   );
 }
