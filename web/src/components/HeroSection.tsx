@@ -104,6 +104,7 @@ const HeroSection = () => {
             <span>📍 Lyon</span>
             <span>📍 Paris</span>
             <span>📍 Nantes</span>
+            <span>📍 Roanne</span>
             <span className="hidden sm:inline">📍 Bordeaux</span>
             <span className="hidden sm:inline">📍 Toulouse</span>
           </div>
