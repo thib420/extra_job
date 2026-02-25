@@ -41,7 +41,7 @@ const HeroSection = () => {
 
           {/* Location search bar */}
           <div className="bg-card rounded-xl p-2 shadow-card-hover">
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <div className="flex items-center gap-2 flex-1 px-4">
                 <MapPin className="w-5 h-5 text-primary shrink-0" />
                 <input
@@ -50,7 +50,7 @@ const HeroSection = () => {
                   className="w-full py-3 bg-transparent text-foreground placeholder:text-muted-foreground outline-none text-base font-medium"
                 />
               </div>
-              <Button size="lg" className="shrink-0 px-6">
+              <Button size="lg" className="w-full sm:w-auto shrink-0 px-6">
                 Trouver des missions
               </Button>
             </div>
