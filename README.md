@@ -91,4 +91,39 @@ npx tsc --noEmit
 2. Finaliser candidatures + mise a jour `spots_filled`.
 3. Activer realtime messages + notifications push (Edge Functions).
 4. Ajouter tests E2E du flux publier -> candidater -> accepter -> chat -> avis.
-# extra_job
+
+---
+
+## Web App (Landing / Marketing)
+
+Le dossier `web/` contient l'application web de landing/marketing construite avec **React + Vite + shadcn/ui + Tailwind CSS** (generee via Lovable).
+
+**Stack:**
+- React + Vite + TypeScript
+- shadcn/ui + Tailwind CSS
+- Meme backend Supabase que l'app mobile
+
+**Lancer le web app:**
+
+```bash
+cd web
+npm install
+npm run dev
+# → http://localhost:8080
+```
+
+**Depuis la racine du monorepo:**
+
+```bash
+npm run web:dev    # lancer en developpement
+npm run web:build  # builder pour la production
+```
+
+**Variables d'environnement (`web/.env`):**
+
+```env
+VITE_SUPABASE_URL=https://<project-ref>.supabase.co
+VITE_SUPABASE_ANON_KEY=<anon-key>
+```
+
+Copier les memes valeurs que `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` de l'app mobile, en changeant le prefixe en `VITE_`.
