@@ -26,7 +26,7 @@ const HeroSection = () => {
       </div>
 
       <div className="container mx-auto px-4 relative z-10">
-        <div className="max-w-2xl animate-fade-in-up">
+        <div className="max-w-2xl mx-auto text-center animate-fade-in-up">
           <span className="inline-block px-4 py-1.5 rounded-full bg-primary-foreground/20 text-primary-foreground text-sm font-medium mb-6 backdrop-blur-sm">
             🤝 100% gratuit · 100% entraide
           </span>
@@ -35,7 +35,7 @@ const HeroSection = () => {
             <br />
             près de chez vous.
           </h1>
-          <p className="text-lg md:text-xl text-primary-foreground/85 mb-8 max-w-lg">
+          <p className="text-lg md:text-xl text-primary-foreground/85 mb-8 max-w-lg mx-auto">
             Entrez votre localisation pour découvrir les missions d'entraide autour de vous.
           </p>
 
@@ -100,7 +100,7 @@ const HeroSection = () => {
             )}
           </div>
 
-          <div className="flex items-center gap-4 mt-6 text-primary-foreground/70 text-sm">
+          <div className="flex items-center justify-center gap-4 mt-6 text-primary-foreground/70 text-sm">
             <span>📍 Lyon</span>
             <span>📍 Paris</span>
             <span>📍 Nantes</span>
