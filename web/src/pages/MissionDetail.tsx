@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import MissionMap from "@/components/MissionMap";
 
 const MissionDetail = () => {
   const { id } = useParams();
@@ -78,6 +79,15 @@ const MissionDetail = () => {
                     </div>
                   </div>
                 </div>
+              </div>
+
+              <div className="bg-card rounded-xl p-6 shadow-card mt-6">
+                <h2 className="font-heading text-xl font-bold text-foreground mb-4">
+                  <MapPin className="inline w-5 h-5 text-primary mr-1 -mt-0.5" />
+                  Localisation
+                </h2>
+                <p className="text-sm text-muted-foreground mb-3">{mission.location}</p>
+                <MissionMap location={mission.location} title={mission.title} />
               </div>
             </div>
 
