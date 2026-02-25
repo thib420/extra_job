@@ -100,7 +100,7 @@ const HeroSection = () => {
             )}
           </div>
 
-          <div className="flex items-center justify-center gap-4 mt-6 text-primary-foreground/70 text-sm">
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-6 text-primary-foreground/70 text-sm">
             <span>📍 Lyon</span>
             <span>📍 Paris</span>
             <span>📍 Nantes</span>
